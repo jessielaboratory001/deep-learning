@@ -1,0 +1,20 @@
+import glob, os
+from PIL import Image
+import time
+
+# 改檔名
+fs = glob.glob("pic2/*.*",)
+i = 1
+for pics in fs:
+    os.rename(pics, 'pic2/b{:0>5d}.jpg'.format(i))
+    time.sleep(0.2)
+    i += 1
+print("=== 完成改名 ===")
+
+# 大小一致
+fs = glob.glob("pic1/*.*")
+for fs1 in fs:
+    img = Image.open(fs1).resize((224, 224)).convert("RGB")
+    img.save(fs1)
+    time.sleep(0.5)
+print("=== 完成resize ===")
