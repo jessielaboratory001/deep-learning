@@ -1,0 +1,139 @@
+# -*- coding: utf-8 -*-
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+import keras
+import matplotlib.pyplot as plt
+from skimage import io
+import pandas as pd
+import numpy as np
+
+#import ssl #mac電腦需import
+#import ssl._create_default_https_context = ssl._create_unverified_context
+
+from glob import glob
+from sklearn.model_selection import train_test_split
+filelist = glob('./pic1/*.*') + glob('./pic2/*.*')
+
+#Append item to list N times
+#img_test = [0] * len(glob('./pic1/*.jpg')) + [1] * len(glob('./pic2/*.jpg')) 
+
+(x_train_path, x_test_path) = train_test_split(filelist, test_size=0.1)
+
+x_train = np.array([np.array(io.imread(item)) for item in x_train_path],dtype=object)
+x_test = np.array([np.array(io.imread(item)) for item in x_test_path],dtype=object)
+
+y_train = np.array([])
+for item in x_train_path:  
+    item1 = item.split('/')
+    if item1[len(item1)-1][0] == 'a':
+        y_train = np.append(y_train, [0])
+    else:
+        y_train = np.append(y_train, [1])
+
+y_test = np.array([])
+for item in x_test_path: 
+    item1 = item.split('/')
+    if item1[len(item1)-1][0] == 'a':
+        y_test = np.append(y_test, [0])
+    else:
+        y_test = np.append(y_test, [1])
+
+# print(x_train.shape)
+# print(y_train.shape)
+# print(x_test.shape)
+# print(y_test.shape)
+
+#資料預處理
+#1.題目預處理(Normalize)
+#Keras在準備隨機那組weights,跟Normalize的圖片比較搭，比較容易找到對的方向。如果一張圖解析度很大，一張圖解析度很小，要做預處理。
+#1.調整方式：第一種方式；在0~1之間 第二種方式：在-1~1之間(剛好一半一半)   ?現在矩陣內容數字在0~255之間，如何把它調整為0~1之間
+#2.因為要用Keras MLP，Keras MLP只能用在一維矩陣，現在為二維矩陣，如何把它攤開成一維矩陣? reshape為攤開，只要把120x120攤開，不是整個7200攤開。
+# x_train.reshape(7200,120*120*3)表示攤開後還是7200筆，每筆是120*120*3像素。 /255是為了讓值變成0~255之間
+
+x_train_shape = x_train.reshape(7200,120*120*3)/255.0
+x_test_shape = x_test.reshape(800,120*120*3)/255.0
+# print(x_train_shape)
+# print(x_test_shape)
+
+#2.答案預處理(One-hot encoding)
+#希望的樣子，P表機率，每個答案有10個值：[P0,P1,...,P9]，因為要做One-hot encoding，有0~9共10個數字
+#5:[0,0,0,0,0,1,0,0,0,0]
+#可能輸出：[0,0,0,0.2,0,0.8,0,0,0,0]
+#目前y_train輸出array([5,0,4,...,5,6,8],dtype=uint8) 要將5,4,...,5,6,8變成10個機率值
+from keras.utils.np_utils import to_categorical #to_categorical為One-hot encoding
+y_train_cat = to_categorical(y_train)
+y_test_cat = to_categorical(y_test)
+
+print("---建模開始---")
+#建立模型
+#第一種：蛋糕支架(Sequentail)，堆上一層(Layers)
+#Layers:Dense(全部的神經都有連接輸入的層)
+#keras.layers.Dense(units有幾條神經, activation=None激活函式,use_bias=True ,kernel_initializer='glorot_uniform,...)
+from keras.models import Sequential
+from keras.layers import Dense
+mlp = Sequential()
+#第一層:input_dim->輸入有幾個，輸出1000，激活函式relu
+#第二層:input_dim->輸出128，激活函式relu
+#第三層:參數1290=1280個係數+10個門檻值(及格)權重，可事先減掉   bias偏差(門檻值)，一個激活函式配上一個bias
+#dense Param:1000*120*120*3+1000=43201000
+mlp.add(Dense(1000, activation='relu', input_dim=120*120*3))
+#dense_1 Param: 1000*128+128(bias) = 128128
+mlp.add(Dense(128, activation='relu'))
+#dense_2 Param: 128*10(神經元的連結)+10(10個輸出,10個激活->10個偏差門檻)
+mlp.add(Dense(2, activation="softmax"))  #輸出為月兔耳、熊童子
+mlp.summary()
+print("---建模完成---")
+
+print("---compile start---")
+#確定模型訓練方式...等
+#隨機(隨便選一組weights)梯度(正確方向)下降
+#分類問題的loss選亂度：最後輸出一個：binary_crossentropy，最後輸出多個：categorical_crossentropy
+#回歸問題的loss：mse、mae
+#衡量標準：loss
+#optimizer：下降的時候優化->基於動量(在走的時候不是等速度，而有速度的累積)
+mlp.compile(loss="categorical_crossentropy",
+    metrics=["accuracy"],
+    optimizer="adam")
+print("---compile ending---")
+
+print("---fit start---")
+#batch_size:幾筆(200)做一次梯度下降(修正)
+#epochs:整份考古題看幾次(10)
+#validation_split=0.1 驗證資料為10%
+#10個epoch, 200batch：17928*10/200->896(次) 
+#verbose為進度條
+
+from keras import backend as K #轉換為張量
+x_train_shape = K.cast_to_floatx(x_train_shape)
+x_test_shape = K.cast_to_floatx(x_test_shape)
+
+y_train_cat = K.cast_to_floatx(y_train_cat)
+y_test_cat = K.cast_to_floatx(y_test_cat)
+
+mlp.fit(x_train_shape,
+    y_train_cat,
+    batch_size=50,
+    epochs=30,
+    validation_split=0.1,
+    verbose=2)
+#執行後所顯示的數字要乘上batch_size=訓練總筆數，驗證總筆數為10%
+#執行後所顯示的val_loss為未訓練過的資料loss值，val_accuracy為未訓練過的資料正確值
+#當val_loss的值變化變為平緩時，就可停止訓練。不然val_loss會過擬合，反而會上升
+print("---fit ending---")
+
+#會顯示10個機率值，要看最高的那個機率
+print("10個機率值；")
+print(mlp.predict(x_test_shape))
+
+# 直接計算loss和正確率accuracy
+print("loss&accuracy",mlp.evaluate(x_test_shape,y_test_cat))
+
+import numpy as np
+pre = mlp.predict(x_test_shape)
+pre = np.argmax(pre,axis=1)
+from sklearn.metrics import confusion_matrix
+print(pd.DataFrame(confusion_matrix(y_test,pre)))
+
+#顯示出預測錯誤的索引值
+print(np.nonzero(pre != y_test))
