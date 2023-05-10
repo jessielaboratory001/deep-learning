@@ -1,0 +1,101 @@
+# -*- coding: utf-8 -*-
+
+from glob import glob
+from sklearn.model_selection import train_test_split
+from skimage import io
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D
+from tensorflow.keras.layers import GlobalAveragePooling2D, Dense
+
+########## 讀取圖片資料
+print("=== 讀取資料start ===")
+filelist = glob('./pic1/*.*') + glob('./pic2/*.*')
+(x_train_path, x_test_path) = train_test_split(filelist, test_size=0.1)
+
+x_train = np.array([np.array(io.imread(item)) for item in x_train_path])
+x_test = np.array([np.array(io.imread(item)) for item in x_test_path])
+
+y_train = np.array([],dtype='int')
+for item in x_train_path:
+  item1 = item.split('/')
+  if item1[len(item1)-1][0] == 'a':
+    y_train = np.append(y_train,0)
+  else:   
+    y_train = np.append(y_train,1)
+
+y_test = np.array([],dtype='int')
+for item in x_test_path: 
+  item1 = item.split('/')
+  if item1[len(item1)-1][0] == 'a':
+    y_test = np.append(y_test,0)
+  else:
+    y_test = np.append(y_test,1)
+
+print(x_train.shape)
+print(x_test.shape)
+print(y_train.shape)
+print(y_test.shape)
+
+trans = ["月兔耳","熊童子"]
+print("=== 讀取資料end ===")
+
+########## 建模
+print("=== 建模start ===")
+layers = [
+    # 1個filter(3 * 3 * 3) * 64(種) + 64(bias) -> 1792
+    Conv2D(64, 3, padding="same", activation="relu", input_shape=(120, 120, 3)),
+    MaxPooling2D(),
+    # 1個filter(3 * 3 * 64) * 128(種) + 128(bias) -> 73856
+    Conv2D(128, 3, padding="same", activation="relu"),
+    MaxPooling2D(),
+    Conv2D(256, 3, padding="same", activation="relu"),
+    MaxPooling2D(),
+    Conv2D(512, 3, padding="same", activation="relu"),
+    MaxPooling2D(),
+    GlobalAveragePooling2D(),
+    # 256 * 10 + 10(bias)
+    Dense(10, activation="softmax")
+]
+model = Sequential(layers)
+model.summary()
+print("=== 建模end ===")
+
+########## compile
+print("=== compile start ===")
+# x: 0~1
+# y: 配合loss這邊做Sparse
+x_train_norm = x_train / 255.0
+x_test_norm = x_test / 255.0
+
+from tensorflow.keras.losses import SparseCategoricalCrossentropy
+model.compile(loss=SparseCategoricalCrossentropy(), #自己會知道5在第5個位置
+       metrics=["accuracy"],
+       optimizer="adam") #小彈珠優化和時間優化法，加速跳過低谷區
+print("=== compile end ===")
+
+print("=== fit start ===")
+########## fit
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+c = [
+    ModelCheckpoint("cnn.h5", save_best_only=True),
+    EarlyStopping(patience=5, restore_best_weights=True)
+]
+
+model.fit(x_train_norm,
+    y_train,
+    batch_size=50,
+    epochs=30,
+    validation_split=0.1,
+    verbose=2,
+    callbacks=c)
+print("=== fit end ===")
+
+#因為model.compile改用loss=SparseCategoricalCrossentropy()，所以y_test_cat改為y_test，不用one hot encoding
+print(model.evaluate(x_test_norm, y_test))
+
+from sklearn.metrics import confusion_matrix
+pre = model.predict(x_test_norm).argmax(axis=1)
+print(pd.DataFrame(confusion_matrix(y_test,pre)))
