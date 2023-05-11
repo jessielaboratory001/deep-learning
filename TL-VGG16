@@ -1,0 +1,119 @@
+# -*- coding: utf-8 -*-
+
+from glob import glob
+from sklearn.model_selection import train_test_split
+from skimage import io
+import matplotlib.pyplot as plt
+from PIL import Image
+import random
+import pandas as pd
+
+#只存檔案路徑，不先讀入圖片到記憶體
+aa = glob("pic1/*.*")
+random.shuffle(aa)
+bb = glob("pic2/*.*")
+random.shuffle(bb)
+train = pd.DataFrame({
+    "filename":aa[:3600] + bb[:3600],
+    "class":["0"] * 3600 + ["1"] * 3600
+})
+validate = pd.DataFrame({
+    "filename":aa[3600:3800] + bb[3600:3800],
+    "class":["0"] * 200 + ["1"] * 200
+})
+test = pd.DataFrame({
+    "filename":aa[3800:4000] + bb[3800:4000],
+    "class":["0"] * 200 + ["1"] * 200
+})
+
+# OpenCV以前都是BGR，現在都是RGB
+# 
+# https://github.com/keras-team/keras-applications/blob/master/keras_applications/imagenet_utils.py
+# 訓練有3種方式：caffe、TF(tensorflow)、torch(pytorch)
+# 1.caffe：轉BGR後，減掉B、G、R的平均值mean = [103.939, 116.779, 123.68]
+# 2.TF：-1~1
+# 3.torch：μ=0, σ=1
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications.vgg16 import preprocess_input
+
+########## 讀取圖片資料
+print("=== 讀取資料start ===")
+train_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+validate_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+test_datagen = ImageDataGenerator(preprocessing_function=preprocess_input)
+
+training_set = train_datagen.flow_from_dataframe(
+    train,
+    ".",    
+    target_size=(224, 224), #每一張圖片都變成(224, 224): 根據當初imagenet的訓練大小
+    batch_size=50, #一次32張
+    class_mode="sparse") #會直接將"0"/"1"字串轉成0/1
+validate_set = test_datagen.flow_from_dataframe(
+    validate,
+    ".",
+    target_size=(224, 224),
+    batch_size=50,
+    class_mode="sparse")
+test_set = test_datagen.flow_from_dataframe(
+    test,
+    ".",
+    target_size=(224, 224),
+    batch_size=50,
+    class_mode="sparse")
+print("=== 讀取資料end ===")
+
+########## 建模
+print("=== 建模start ===")
+from keras.applications.vgg16 import VGG16
+vgg = VGG16(include_top=False, input_shape=(224, 224, 3))
+vgg.summary()
+
+from keras.models import Sequential
+from keras.layers import GlobalAveragePooling2D, Dense
+from keras.layers import BatchNormalization
+for l in vgg.layers:
+    l.trainable = False #這層不訓練
+layers = [
+    BatchNormalization(),
+    GlobalAveragePooling2D(),
+    Dense(2, activation="softmax")
+]
+layers = vgg.layers + layers
+model = Sequential(layers)
+model.summary()
+print("=== 建模end ===")
+
+########## compile
+print("=== compile start ===")
+from keras.losses import SparseCategoricalCrossentropy
+model.compile(loss=SparseCategoricalCrossentropy(),
+       optimizer="adam",
+       metrics=["accuracy"])
+print("=== compile end ===")
+
+print("=== fit start ===")
+########## fit
+# 控制訓練次數: 控制過擬合程度
+# 不希望程式死背/看稀少, 檢查test
+# 訓練次數過多反而會變差
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+callbacks = [
+    ModelCheckpoint("cnn.h5", save_best_only=True),
+    # 檢查test資料, 如果5次都沒有表現更好,就停止
+    EarlyStopping(patience=5, restore_best_weights=True)
+]
+# 不想要進度條, verbose=2
+model.fit(training_set,
+     epochs=20,
+     validation_data=validate_set,
+     callbacks=callbacks,
+     verbose=2)
+print("=== fit end ===")
+
+print(model.evaluate(x=test_set))
+
+pre = model.predict(test_set).argmax(axis=1)
+print(pre)
+
+model.save('./model_vgg16.h5')
