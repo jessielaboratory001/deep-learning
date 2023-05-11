@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+import os
+from tensorflow.keras.models import load_model
+from PIL import Image
+import numpy as np
+from keras.applications.vgg16 import preprocess_input
+
+model = load_model("model_vgg16.h5")
+trans = [
+    "月兔耳",
+    "熊童子",
+ ]
+img = Image.open('./a01.jpg').resize((224, 224)).convert("RGB")
+img_rgb = np.array(img)
+print(img_rgb.shape)
+img = img_rgb.reshape(1, 224, 224, 3)
+
+#caffe：轉BGR後，減掉B、G、R的平均值mean = [103.939, 116.779, 123.68]
+img_bgr = preprocess_input(img)
+
+probas = model.predict(img_bgr)[0]
+for i in range(2):
+    print(trans[i], "的機率是:", round(probas[i], 4))
+ans = probas.argmax(axis=-1)
+print("最高機率是:", trans[ans])
