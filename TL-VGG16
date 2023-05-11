@@ -117,3 +117,32 @@ pre = model.predict(test_set).argmax(axis=1)
 print(pre)
 
 model.save('./model_vgg16.h5')
+
+#confusion matrix
+def getdata(df):
+    img_ori, img_preprocess, target = [], [], []
+    for fn, c in zip(df["filename"], df["class"]):
+        img = Image.open(fn).resize((224, 224)).convert("RGB")
+        img_np = np.array(img)
+        # original
+        img_ori.append(img_np)
+        img_np_pre = preprocess_input(img_np)
+        # preprocess
+        img_preprocess.append(img_np_pre)
+        if c == "0":
+            target.append(0)
+        else:
+            target.append(1)
+    return (np.array(img_ori), np.array(img_preprocess), np.array(target))
+img_ori, x_test, y_test = getdata(test)
+
+print(img_ori.shape)
+print(x_test.shape)
+print(y_test.shape)
+
+pre = model.predict(img_ori).argmax(axis=-1)
+print(pre)
+
+from sklearn.metrics import confusion_matrix
+mat = confusion_matrix(y_test, pre)
+print(mat)
