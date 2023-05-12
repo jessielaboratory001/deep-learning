@@ -1,0 +1,99 @@
+# -*- coding: utf-8 -*-
+
+from glob import glob
+import numpy as np
+import keras
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from PIL import Image
+
+
+########## 讀取圖片資料
+print("=== 讀取資料start ===")
+filelist = glob('./pic1/*.*') + glob('./pic2/*.*')
+(x_train_path, x_test_path) = train_test_split(filelist, test_size=0.1)
+
+# x_train = np.array([np.array(Image.open(item).resize((32, 32)).convert("RGB")) for item in x_train_path])
+# x_test = np.array([np.array(Image.open(item).resize((32, 32)).convert("RGB")) for item in x_test_path])
+x_train = np.array([np.array(Image.open(item).convert("RGB")) for item in x_train_path])
+x_test = np.array([np.array(Image.open(item).convert("RGB")) for item in x_test_path])
+
+
+y_train = np.array([],dtype='int')
+for item in x_train_path:
+  item1 = item.split('/')
+  if item1[len(item1)-1][0] == 'a':
+    y_train = np.append(y_train,0)
+  else:
+    y_train = np.append(y_train,1)
+
+y_test = np.array([],dtype='int')
+for item in x_test_path:
+  item1 = item.split('/')
+  if item1[len(item1)-1][0] == 'a':
+    y_test = np.append(y_test,0)
+  else:
+    y_test = np.append(y_test,1)
+
+print(x_train.shape)
+print(x_test.shape)
+print(y_train.shape)
+print(y_test.shape)
+
+print("=== 讀取資料end ===")
+
+print("=== 建模start ===")
+from tensorflow.keras.applications.resnet50 import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input, decode_predictions
+
+input_t = keras.Input(shape=(120,120,3))
+res_model = ResNet50(include_top=False, weights='imagenet', input_shape=(120,120,3),input_tensor=input_t)
+res_model.summary()
+
+from keras.models import Sequential
+from keras.layers import Flatten, Dense
+
+for layer in res_model.layers[:]:
+	layer.trainable = False #這層不訓練
+
+model = Sequential()
+model.add(res_model)
+model.add(keras.layers.BatchNormalization())
+model.add(keras.layers.GlobalAveragePooling2D())
+model.add(keras.layers.Dense(2, activation='softmax'))
+model.summary()
+print("=== 建模end ===")
+
+print("=== compile start ===")
+# 控制訓練次數: 控制過擬合程度
+# 不希望程式死背/看稀少, 檢查test
+# 訓練次數過多反而會變差
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+
+check_point = keras.callbacks.ModelCheckpoint(filepath="cifar10.h5",
+                                                monitor="val_acc",
+                                                mode="max",
+                                                save_best_only=True,
+                                                )
+
+from tensorflow.keras.losses import SparseCategoricalCrossentropy
+model.compile(loss=SparseCategoricalCrossentropy(), #自己會知道5在第5個位置
+       metrics=["accuracy"],
+       optimizer="adam") #小彈珠優化和時間優化法，加速跳過低窪區
+
+print("=== compile end ===")
+
+print("=== fit start ===")
+history = model.fit(x_train,y_train,batch_size=32,epochs=20,
+		validation_data=(x_test,y_test),
+		callbacks=[check_point],
+        verbose=2)
+print("=== fit end ===")
+
+model.save('./cifar10.h5')
+
+print(model.evaluate(x_test, y_test))
+
+from sklearn.metrics import confusion_matrix
+pre = model.predict(x_test).argmax(axis=1)
+print(pd.DataFrame(confusion_matrix(y_test,pre)))
