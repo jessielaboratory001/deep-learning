@@ -104,7 +104,7 @@ callbacks = [
     EarlyStopping(patience=5, restore_best_weights=True)
 ]
 # 不想要進度條, verbose=2
-model.fit(training_set,
+history = model.fit(training_set,
      epochs=20,
      validation_data=validate_set,
      callbacks=callbacks,
@@ -146,3 +146,11 @@ print(pre)
 from sklearn.metrics import confusion_matrix
 mat = confusion_matrix(y_test, pre)
 print(mat)
+
+# 圖示val_loss是否收斂
+import matplotlib.pyplot as plt
+plt.plot(history.history["loss"])
+plt.plot(history.history["val_loss"])
+plt.title("Loss Graph")
+plt.legend(['loss', 'val_loss'], loc="upper right")
+plt.show()
