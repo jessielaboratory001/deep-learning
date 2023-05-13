@@ -111,7 +111,7 @@ x_test_shape = K.cast_to_floatx(x_test_shape)
 y_train_cat = K.cast_to_floatx(y_train_cat)
 y_test_cat = K.cast_to_floatx(y_test_cat)
 
-mlp.fit(x_train_shape,
+history = mlp.fit(x_train_shape,
     y_train_cat,
     batch_size=50,
     epochs=30,
