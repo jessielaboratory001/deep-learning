@@ -97,3 +97,11 @@ print(model.evaluate(x_test, y_test))
 from sklearn.metrics import confusion_matrix
 pre = model.predict(x_test).argmax(axis=1)
 print(pd.DataFrame(confusion_matrix(y_test,pre)))
+
+# 圖示val_loss是否收斂
+import matplotlib.pyplot as plt
+plt.plot(history.history["loss"])
+plt.plot(history.history["val_loss"])
+plt.title("Loss Graph")
+plt.legend(['loss', 'val_loss'], loc="upper right")
+plt.show()
