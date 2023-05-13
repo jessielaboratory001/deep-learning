@@ -137,3 +137,11 @@ print(pd.DataFrame(confusion_matrix(y_test,pre)))
 
 #顯示出預測錯誤的索引值
 print(np.nonzero(pre != y_test))
+
+# 圖示val_loss是否收斂
+import matplotlib.pyplot as plt
+plt.plot(history.history["loss"])
+plt.plot(history.history["val_loss"])
+plt.title("Loss Graph")
+plt.legend(['loss', 'val_loss'], loc="upper right")
+plt.show()
