@@ -84,7 +84,7 @@ c = [
     EarlyStopping(patience=5, restore_best_weights=True)
 ]
 
-model.fit(x_train_norm,
+history = model.fit(x_train_norm,
     y_train,
     batch_size=50,
     epochs=30,
@@ -99,3 +99,11 @@ print(model.evaluate(x_test_norm, y_test))
 from sklearn.metrics import confusion_matrix
 pre = model.predict(x_test_norm).argmax(axis=1)
 print(pd.DataFrame(confusion_matrix(y_test,pre)))
+
+# 圖示val_loss是否收斂
+import matplotlib.pyplot as plt
+plt.plot(history.history["loss"])
+plt.plot(history.history["val_loss"])
+plt.title("Loss Graph")
+plt.legend(['loss', 'val_loss'], loc="upper right")
+plt.show()
